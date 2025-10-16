@@ -1,24 +1,58 @@
-import logo from './logo.svg';
-import './App.css';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './pages/Login';
+import Planner from './pages/Planner';
+import Profile from './pages/Profile';
+import Community from './pages/Community';
+import UserSchedule from './pages/UserSchedule';
+
+function PrivateRoute({ children }) {
+  const { currentUser } = useAuth();
+  return currentUser ? children : <Navigate to="/" />;
+}
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Login />} />
+          <Route 
+            path="/planner" 
+            element={
+              <PrivateRoute>
+                <Planner />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/profile" 
+            element={
+              <PrivateRoute>
+                <Profile />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/community" 
+            element={
+              <PrivateRoute>
+                <Community />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/user/:userId" 
+            element={
+              <PrivateRoute>
+                <UserSchedule />
+              </PrivateRoute>
+            } 
+          />
+        </Routes>
+      </AuthProvider>
+    </Router>
   );
 }
 
