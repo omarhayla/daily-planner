@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, addDoc, query, where, onSnapshot, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
+import TaskAlerts from '../components/TaskAlerts';
 
 export default function Planner() {
   const [tasks, setTasks] = useState([]);
@@ -138,6 +139,7 @@ export default function Planner() {
       </nav>
 
       <div className="max-w-7xl mx-auto p-6">
+ <TaskAlerts tasks={tasks} />  {/* <-- AJOUTE CETTE LIGNE */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6 border-2 border-indigo-200">
           <div className="flex items-center justify-between">
             <button
