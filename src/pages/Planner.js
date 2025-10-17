@@ -8,9 +8,11 @@ import TaskAlerts from '../components/TaskAlerts';
 export default function Planner() {
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState('');
+  const [newDescription, setNewDescription] = useState('');
   const [selectedHour, setSelectedHour] = useState('09:00');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [view, setView] = useState('day'); // 'day', 'week', 'month'
+  const [view, setView] = useState('day');
+  const [expandedTask, setExpandedTask] = useState(null);
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -19,7 +21,20 @@ export default function Planner() {
     return `${hour}:00`;
   });
 
-  // Get week dates
+  function getTimeAgo(date) {
+    const createdAt = date?.toDate ? date.toDate() : new Date(date);
+    const now = new Date();
+    const diffMs = now - createdAt;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  }
+
   function getWeekDates() {
     const curr = new Date(selectedDate);
     const week = [];
@@ -70,6 +85,7 @@ export default function Planner() {
       await addDoc(collection(db, 'tasks'), {
         userId: currentUser.uid,
         task: newTask,
+        description: newDescription,
         hour: selectedHour,
         date: selectedDate,
         completed: false,
@@ -77,6 +93,7 @@ export default function Planner() {
       });
       
       setNewTask('');
+      setNewDescription('');
     } catch (error) {
       console.error('Error adding task:', error);
     }
@@ -85,7 +102,8 @@ export default function Planner() {
   async function toggleComplete(taskId, currentStatus) {
     try {
       await updateDoc(doc(db, 'tasks', taskId), {
-        completed: !currentStatus
+        completed: !currentStatus,
+        updatedAt: new Date()
       });
     } catch (error) {
       console.error('Error updating task:', error);
@@ -247,28 +265,40 @@ export default function Planner() {
           <h2 className="text-2xl font-bold mb-4 text-indigo-900 flex items-center gap-2">
             <span className="text-3xl">➕</span> Add New Task
           </h2>
-          <form onSubmit={handleAddTask} className="flex gap-3 flex-wrap">
-            <input
-              type="text"
-              value={newTask}
-              onChange={(e) => setNewTask(e.target.value)}
-              placeholder="What's on your mind?"
-              className="flex-1 min-w-[250px] px-4 py-3 border-2 border-indigo-300 rounded-xl focus:outline-none focus:border-indigo-500 font-medium shadow-sm"
+          <form onSubmit={handleAddTask} className="space-y-4">
+            <div className="flex gap-3 flex-wrap">
+              <input
+                type="text"
+                value={newTask}
+                onChange={(e) => setNewTask(e.target.value)}
+                placeholder="Task title (e.g., Team meeting)"
+                className="flex-1 min-w-[250px] px-4 py-3 border-2 border-indigo-300 rounded-xl focus:outline-none focus:border-indigo-500 font-medium shadow-sm"
+                required
+              />
+              <select
+                value={selectedHour}
+                onChange={(e) => setSelectedHour(e.target.value)}
+                className="px-4 py-3 border-2 border-indigo-300 rounded-xl focus:outline-none focus:border-indigo-500 font-semibold shadow-sm bg-white"
+              >
+                {hours.map(hour => (
+                  <option key={hour} value={hour}>🕐 {hour}</option>
+                ))}
+              </select>
+            </div>
+            
+            <textarea
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              placeholder="Description (optional): Add details, notes, or context about this task..."
+              className="w-full px-4 py-3 border-2 border-indigo-300 rounded-xl focus:outline-none focus:border-indigo-500 font-medium shadow-sm"
+              rows="3"
             />
-            <select
-              value={selectedHour}
-              onChange={(e) => setSelectedHour(e.target.value)}
-              className="px-4 py-3 border-2 border-indigo-300 rounded-xl focus:outline-none focus:border-indigo-500 font-semibold shadow-sm bg-white"
-            >
-              {hours.map(hour => (
-                <option key={hour} value={hour}>🕐 {hour}</option>
-              ))}
-            </select>
+            
             <button
               type="submit"
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-3 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition shadow-lg font-bold"
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-3 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition shadow-lg font-bold"
             >
-              Add Task
+              ➕ Add Task
             </button>
           </form>
         </div>
@@ -359,43 +389,83 @@ export default function Planner() {
                         </div>
                       </div>
                       <div className="flex-1 space-y-2">
-                        {hourTasks.map(task => (
-                          <div
-                            key={task.id}
-                            className={`p-4 rounded-xl shadow-md transition transform hover:scale-102 border-2 ${
-                              task.completed 
-                                ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300' 
-                                : 'bg-gradient-to-r from-white to-indigo-50 border-indigo-200'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-4 flex-1">
-                                <input
-                                  type="checkbox"
-                                  checked={task.completed}
-                                  onChange={() => toggleComplete(task.id, task.completed)}
-                                  className="w-6 h-6 cursor-pointer accent-indigo-600"
-                                />
-                                <span className={`text-lg font-medium ${
-                                  task.completed ? 'line-through text-gray-500' : 'text-gray-800'
-                                }`}>
-                                  {task.task}
-                                </span>
-                                {task.completed && (
-                                  <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow">
-                                    ✓ Done
-                                  </span>
-                                )}
+                        {hourTasks.map(task => {
+                          const createdAt = task.createdAt?.toDate ? task.createdAt.toDate() : new Date(task.createdAt);
+                          const isExpanded = expandedTask === task.id;
+                          
+                          return (
+                            <div
+                              key={task.id}
+                              className={`p-4 rounded-xl shadow-md transition border-2 ${
+                                task.completed 
+                                  ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300' 
+                                  : 'bg-gradient-to-r from-white to-indigo-50 border-indigo-200'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-start gap-4 flex-1">
+                                  <input
+                                    type="checkbox"
+                                    checked={task.completed}
+                                    onChange={() => toggleComplete(task.id, task.completed)}
+                                    className="w-6 h-6 cursor-pointer accent-indigo-600 mt-1"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-lg font-medium ${
+                                        task.completed ? 'line-through text-gray-500' : 'text-gray-800'
+                                      }`}>
+                                        {task.task}
+                                      </span>
+                                      {task.description && (
+                                        <button
+                                          onClick={() => setExpandedTask(isExpanded ? null : task.id)}
+                                          className="text-indigo-600 hover:text-indigo-800 text-sm font-semibold"
+                                        >
+                                          {isExpanded ? '▼ Hide' : '▶ Details'}
+                                        </button>
+                                      )}
+                                      {task.completed && (
+                                        <span className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow ml-auto">
+                                          ✓ Done
+                                        </span>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Description - shown when expanded */}
+                                    {isExpanded && task.description && (
+                                      <div className="mt-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <span className="text-sm font-semibold text-indigo-800">📝 Description:</span>
+                                        </div>
+                                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                                          {task.description}
+                                        </p>
+                                      </div>
+                                    )}
+                                    
+                                    <div className="flex items-center gap-3 mt-2 text-xs">
+                                      <span className="text-gray-500">
+                                        🕐 Created {getTimeAgo(task.createdAt)}
+                                      </span>
+                                      {task.updatedAt && (
+                                        <span className="text-gray-400">
+                                          ✏️ Updated {getTimeAgo(task.updatedAt)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => deleteTask(task.id)}
+                                  className="bg-red-100 hover:bg-red-200 text-red-600 px-4 py-2 rounded-lg transition font-semibold shadow-sm ml-4"
+                                >
+                                  🗑️
+                                </button>
                               </div>
-                              <button
-                                onClick={() => deleteTask(task.id)}
-                                className="bg-red-100 hover:bg-red-200 text-red-600 px-4 py-2 rounded-lg transition font-semibold shadow-sm"
-                              >
-                                🗑️ Delete
-                              </button>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -408,3 +478,35 @@ export default function Planner() {
     </div>
   );
 }
+```
+
+---
+
+## **What's New:**
+
+✅ **Title field** - Main task name (required)  
+✅ **Description field** - Optional detailed description (can be a paragraph)  
+✅ **Collapsed by default** - Only shows title in the list  
+✅ **▶ Details button** - Click to expand and see the full description  
+✅ **▼ Hide button** - Click to collapse the description  
+✅ **Beautiful layout** - Description appears in a blue box when expanded  
+
+---
+
+## **How It Works:**
+
+1. **Add a task:**
+   - Title: "Team meeting"
+   - Description: "Discuss Q4 goals, review project timeline, assign new tasks to team members"
+
+2. **In the planner, you see:**
+```
+   ✓ Team meeting  ▶ Details
+```
+
+3. **Click "▶ Details":**
+```
+   ✓ Team meeting  ▼ Hide
+   
+   📝 Description:
+   Discuss Q4 goals, review project timeline, assign new tasks to team members
