@@ -11,6 +11,7 @@ export default function Planner() {
   const [newDescription, setNewDescription] = useState('');
   const [selectedHour, setSelectedHour] = useState('09:00');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [view, setView] = useState('day');
   const [expandedTask, setExpandedTask] = useState(null);
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
@@ -20,14 +21,36 @@ export default function Planner() {
     return `${hour}:00`;
   });
 
+  function getWeekDates() {
+    const curr = new Date(selectedDate);
+    const week = [];
+    const firstDay = curr.getDate() - curr.getDay();
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(curr.setDate(firstDay + i));
+      week.push(date.toISOString().split('T')[0]);
+    }
+    return week;
+  }
+
   useEffect(() => {
     if (!currentUser) return;
 
-    const q = query(
-      collection(db, 'tasks'),
-      where('userId', '==', currentUser.uid),
-      where('date', '==', selectedDate)
-    );
+    let q;
+    if (view === 'week') {
+      const weekDates = getWeekDates();
+      q = query(
+        collection(db, 'tasks'),
+        where('userId', '==', currentUser.uid),
+        where('date', 'in', weekDates)
+      );
+    } else {
+      q = query(
+        collection(db, 'tasks'),
+        where('userId', '==', currentUser.uid),
+        where('date', '==', selectedDate)
+      );
+    }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const tasksData = snapshot.docs.map(doc => ({
@@ -38,7 +61,7 @@ export default function Planner() {
     });
 
     return unsubscribe;
-  }, [currentUser, selectedDate]);
+  }, [currentUser, selectedDate, view]);
 
   async function handleAddTask(e) {
     e.preventDefault();
@@ -101,16 +124,51 @@ export default function Planner() {
     return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   }
 
+  function getDayName(dateStr) {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { weekday: 'short' });
+  }
+
+  function getDayNumber(dateStr) {
+    const date = new Date(dateStr);
+    return date.getDate();
+  }
+
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
+  const todayTasks = tasks.filter(t => t.date === new Date().toISOString().split('T')[0]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100">
       <nav className="bg-white shadow-lg border-b-4 border-indigo-500">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              Daily Planner
-            </h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                Daily Planner
+              </h1>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setView('day')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                    view === 'day' 
+                      ? 'bg-indigo-600 text-white' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Day
+                </button>
+                <button
+                  onClick={() => setView('week')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                    view === 'week' 
+                      ? 'bg-indigo-600 text-white' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Week
+                </button>
+              </div>
+            </div>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => navigate('/community')}
@@ -139,7 +197,8 @@ export default function Planner() {
       </nav>
 
       <div className="max-w-7xl mx-auto p-6">
- <TaskAlerts tasks={tasks} />  {/* <-- AJOUTE CETTE LIGNE */}
+        <TaskAlerts tasks={todayTasks} />
+
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6 border-2 border-indigo-200">
           <div className="flex items-center justify-between">
             <button
@@ -226,97 +285,157 @@ export default function Planner() {
           </form>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-indigo-200">
-          <h2 className="text-2xl font-bold mb-6 text-indigo-900">Schedule</h2>
-          
-          {tasks.length === 0 ? (
-            <div className="text-center py-16">
-              <p className="text-xl text-gray-500 font-medium">No tasks scheduled yet</p>
-              <p className="text-gray-400 mt-2">Add your first task above to get started</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {hours.map(hour => {
-                const hourTasks = tasks.filter(t => t.hour === hour);
-                if (hourTasks.length === 0) return null;
+        {view === 'week' && (
+          <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-indigo-200">
+            <h2 className="text-2xl font-bold mb-6 text-indigo-900">Week Overview</h2>
+            <div className="grid grid-cols-7 gap-4">
+              {getWeekDates().map(date => {
+                const dayTasks = tasks.filter(t => t.date === date);
+                const isSelectedDay = date === selectedDate;
+                const isTodayDay = date === new Date().toISOString().split('T')[0];
                 
                 return (
-                  <div key={hour} className="flex gap-4">
-                    <div className="flex-shrink-0 w-20 pt-3">
-                      <div className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white px-3 py-2 rounded-lg text-center font-bold shadow-md text-sm">
-                        {hour}
+                  <div
+                    key={date}
+                    onClick={() => setSelectedDate(date)}
+                    className={`cursor-pointer rounded-xl p-4 transition ${
+                      isSelectedDay 
+                        ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-lg transform scale-105' 
+                        : isTodayDay
+                        ? 'bg-gradient-to-br from-green-100 to-emerald-100 border-2 border-green-400'
+                        : 'bg-gray-50 hover:bg-gray-100 border-2 border-gray-200'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className={`font-bold text-sm ${isSelectedDay ? 'text-white' : 'text-gray-600'}`}>
+                        {getDayName(date)}
                       </div>
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      {hourTasks.map(task => {
-                        const isExpanded = expandedTask === task.id;
-                        
-                        return (
+                      <div className={`text-2xl font-bold mt-1 ${isSelectedDay ? 'text-white' : 'text-gray-800'}`}>
+                        {getDayNumber(date)}
+                      </div>
+                      <div className={`mt-2 text-xs font-semibold ${isSelectedDay ? 'text-white' : 'text-gray-500'}`}>
+                        {dayTasks.length} task{dayTasks.length !== 1 ? 's' : ''}
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {dayTasks.slice(0, 2).map(task => (
                           <div
                             key={task.id}
-                            className={`p-4 rounded-xl shadow-md transition border-2 ${
-                              task.completed 
-                                ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300' 
-                                : 'bg-gradient-to-r from-white to-indigo-50 border-indigo-200'
+                            className={`text-xs truncate px-2 py-1 rounded ${
+                              task.completed
+                                ? isSelectedDay ? 'bg-green-400 text-white' : 'bg-green-100 text-green-800'
+                                : isSelectedDay ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'
                             }`}
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-start gap-3 flex-1">
-                                <input
-                                  type="checkbox"
-                                  checked={task.completed}
-                                  onChange={() => toggleComplete(task.id, task.completed)}
-                                  className="w-5 h-5 cursor-pointer accent-indigo-600 mt-1"
-                                />
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className={`text-lg font-medium ${
-                                      task.completed ? 'line-through text-gray-500' : 'text-gray-800'
-                                    }`}>
-                                      {task.task}
-                                    </span>
-                                    {task.description && (
-                                      <button
-                                        onClick={() => setExpandedTask(isExpanded ? null : task.id)}
-                                        className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold"
-                                      >
-                                        {isExpanded ? 'Hide Details' : 'Show Details'}
-                                      </button>
-                                    )}
-                                    {task.completed && (
-                                      <span className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                                        Done
-                                      </span>
-                                    )}
-                                  </div>
-                                  
-                                  {isExpanded && task.description && (
-                                    <div className="mt-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-                                      <p className="text-sm font-semibold text-indigo-800 mb-1">Description:</p>
-                                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                                        {task.description}
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => deleteTask(task.id)}
-                                className="bg-red-100 hover:bg-red-200 text-red-600 px-3 py-1 rounded-lg transition font-semibold shadow-sm text-sm"
-                              >
-                                Delete
-                              </button>
-                            </div>
+                            {task.task}
                           </div>
-                        );
-                      })}
+                        ))}
+                        {dayTasks.length > 2 && (
+                          <div className={`text-xs ${isSelectedDay ? 'text-white' : 'text-gray-500'}`}>
+                            +{dayTasks.length - 2} more
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {view === 'day' && (
+          <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-indigo-200">
+            <h2 className="text-2xl font-bold mb-6 text-indigo-900">Schedule</h2>
+            
+            {tasks.length === 0 ? (
+              <div className="text-center py-16">
+                <p className="text-xl text-gray-500 font-medium">No tasks scheduled yet</p>
+                <p className="text-gray-400 mt-2">Add your first task above to get started</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {hours.map(hour => {
+                  const hourTasks = tasks.filter(t => t.hour === hour);
+                  if (hourTasks.length === 0) return null;
+                  
+                  return (
+                    <div key={hour} className="flex gap-4">
+                      <div className="flex-shrink-0 w-20 pt-3">
+                        <div className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white px-3 py-2 rounded-lg text-center font-bold shadow-md text-sm">
+                          {hour}
+                        </div>
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        {hourTasks.map(task => {
+                          const isExpanded = expandedTask === task.id;
+                          
+                          return (
+                            <div
+                              key={task.id}
+                              className={`p-4 rounded-xl shadow-md transition border-2 ${
+                                task.completed 
+                                  ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300' 
+                                  : 'bg-gradient-to-r from-white to-indigo-50 border-indigo-200'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-3 flex-1">
+                                  <input
+                                    type="checkbox"
+                                    checked={task.completed}
+                                    onChange={() => toggleComplete(task.id, task.completed)}
+                                    className="w-5 h-5 cursor-pointer accent-indigo-600 mt-1"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className={`text-lg font-medium ${
+                                        task.completed ? 'line-through text-gray-500' : 'text-gray-800'
+                                      }`}>
+                                        {task.task}
+                                      </span>
+                                      {task.description && (
+                                        <button
+                                          onClick={() => setExpandedTask(isExpanded ? null : task.id)}
+                                          className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold"
+                                        >
+                                          {isExpanded ? 'Hide Details' : 'Show Details'}
+                                        </button>
+                                      )}
+                                      {task.completed && (
+                                        <span className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold">
+                                          Done
+                                        </span>
+                                      )}
+                                    </div>
+                                    
+                                    {isExpanded && task.description && (
+                                      <div className="mt-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                                        <p className="text-sm font-semibold text-indigo-800 mb-1">Description:</p>
+                                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                                          {task.description}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => deleteTask(task.id)}
+                                  className="bg-red-100 hover:bg-red-200 text-red-600 px-3 py-1 rounded-lg transition font-semibold shadow-sm text-sm"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
